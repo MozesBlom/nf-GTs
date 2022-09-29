@@ -99,6 +99,7 @@ Run specific options can  be specified in the `./nextflow.config` script. All ot
 - NF-GTs only does a 'pseudo-alignment', meaning that it assumes that the consensus sequences for each chromosome/scaffold is the same length across all individuals. Indel variation should therefore have been removed from the variant call set or not incorporated into the existing sequences.
 - Partially motivated for the required above, variant and mask sets need to be called on the SAME reference assembly across all individuals.
 - Sex chromosomes should be treated differently due to their distint inheritance history. Such chromosomes should either be excluded from the (chromo) input list or assigned in the `sex_chromos` parameter.
+- See environment.yml for all the required software AND also some suggestion on how to bypass the incompatibility between iqtree2 and ete3 in a single conda environment
 
 
 ### Output

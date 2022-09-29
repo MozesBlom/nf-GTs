@@ -15,3 +15,6 @@ dependencies:
   ## NOTE iqtree2 and ete-toolkit (part of the ete3 install) may not be cross compatible. ete-toolkit automatically downgrades to iqtree v. 1.5?
   - iqtree=2.2.0.3
 
+## I personally solved the iqtree2 and ete3 incompatibility by creating two conda environments:
+## 1. For all bioinformatic/phylogenetic analyses (conda env titled: nf_phylo)
+## 2. For running ete3 and visualization in python specifically (conda env titled: ete3)
