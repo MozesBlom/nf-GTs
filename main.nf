@@ -56,7 +56,6 @@ process call_consensus {
  */
 
 	tag "Create consensus sequence for $chromo of $indiv"
-	publishDir "${params.outputdir}/00.consensus", mode:'copy'
 
 	input:
 	val(indiv) from indivs_all
@@ -140,7 +139,6 @@ process chromo_raw_msa {
 	 */
 
 	tag "Raw multiple sequence alignment per chromosome -- raw"
-	publishDir "${params.outputdir}/01.alignments/00.chromosomes/", mode:'copy'
 
 	input:
 	tuple val(chromo), \
@@ -191,13 +189,13 @@ process subset_MSA_to_windows {
 	 * "*filt_indivs_aln.fa" = This includes only those individuals that fulfill the (missing_data_per_row_threshold) threshold
 	 *
 	 * For now only the filtered dataset is used because IQtree runs into issues with too much missing data
-	 * 1) For process (window_msa_to_phy) -- Infer a tree for phylo
+	 * 1) For process (window_msa_to_phy_SINGLE) -- Infer each tree as a separate SLURM job
+	 * 2) For process (window_msa_to_phy_COMBINED) -- Infer all trees for a subset/chromosomes as a single SLURM job
 	 */
 
 	label 'SC_SM_HT'
     
 	tag "Create window alignments for each chromo"
-	publishDir "${params.outputdir}/01.alignments/01.windows/${subset}/${p1}_${p2}_${p3}_${out}/${chromo}/", mode:'copy'
 
 	input:
 	tuple val(chromo), \
@@ -215,7 +213,7 @@ process subset_MSA_to_windows {
 	val(p3), \
 	val(out), \
 	val(subset), \
-	file("*filt_indivs_aln.fa") optional true into combo_indiv_filt_window_msa_by_subset_ch1
+	file("*filt_indivs_aln.fa") optional true into combo_indiv_filt_window_msa_by_subset_ch1, combo_indiv_filt_window_msa_by_subset_ch2
 	tuple val(chromo), \
 	val(p1), \
 	val(p2), \
@@ -286,7 +284,24 @@ combo_indiv_filt_window_msa_by_subset_ch1
 	.set { combo_indiv_filt_window_msa_by_subset_annotated_ch1 }
 
 
-process window_msa_to_phy {
+combo_indiv_filt_window_msa_by_subset_ch2
+	.map{ it ->
+
+		def chromo = it[0]
+		def p1 = it[1]
+		def p2 = it[2]
+		def p3 = it[3]
+		def out = it[4]
+		def combo = p1 + '_' + p2 + '_' + p3 + '_' + out
+		def subset = it[5]
+		def aln_list = it[6]
+
+		[chromo, combo, subset, aln_list]
+	}
+	.set { combo_indiv_filt_window_msa_by_subset_annotated_ch2 }
+
+
+process window_msa_to_phy_SINGLE {
 
 	/*
 	 * Take each window MSA and infer phylogeny using IQtree2
@@ -312,6 +327,9 @@ process window_msa_to_phy {
 	val(subset), \
 	file("${basename}.treefile") into combo_window_phy_by_subset_ch1
 
+	when:
+	params.window_msa_to_phy_in_parallel == true
+
 	script:
 	"""
 
@@ -326,9 +344,58 @@ process window_msa_to_phy {
 	"""
 }
 
+
+process window_msa_to_phy_COMBINED {
+
+	/*
+	 * Take each window MSA and infer phylogeny using IQtree2
+	 *
+	 * Directed into one channel:
+	 * - ch1: process (calc_topo_freqs) -- Calculate the distribution of gene tree freqs
+	 */
+    
+
+	tag "Create window phylogenies for all windows (across all subsets)"
+	publishDir "${params.outputdir}/02.phylogenies/00.windows/${subset}/${combo}/${chromo}/", mode:'copy'
+
+	input:
+	tuple val(chromo), \
+	val(combo), \
+	val(subset), \
+	file(aln_list) from combo_indiv_filt_window_msa_by_subset_annotated_ch2
+
+	output:
+	tuple val(chromo), \
+	val(combo), \
+	val(subset), \
+	file("*.treefile") into combo_window_phy_by_subset_ch2
+
+	when:
+	params.window_msa_to_phy_in_parallel == false
+
+	script:
+	"""
+	for aln_fn in ${aln_list}
+	do
+		BASENAME=`basename \$aln_fn .fa`
+
+		iqtree \
+		-s \$aln_fn \
+		-m MFP \
+		-nt AUTO \
+		-ntmax ${task.cpus} \
+		--redo \
+		--prefix \$BASENAME
+	done
+
+	"""
+}
+
+
+
  /*
  *
- * 		NOTE, each tree will be individually added to the channel.
+ * 		NOTE, each tree will be individually or by chromosome added to the channel.
  *		To process them individually would be computationally inefficient.
  *		Moreover, they should be independently calculated by comparison.
  *		Therefore we need to process the channel accordingly:
@@ -344,18 +411,33 @@ process window_msa_to_phy {
  * 		Now create an input channel where all trees are stored by subset and combo
  */
 
-combo_window_phy_by_subset_ch1
-	.groupTuple(by: [2,1])
-    .map{ it ->
+if (params.window_msa_to_phy_in_parallel == true) {
+	combo_window_phy_by_subset_ch1
+		.groupTuple(by: [2,1])
+		.map{ it ->
 
-            def chromo = it[0]
-            def combo = it[1]
-            def subset = it[2]
-            def trees = it[3].flatten()
+			def chromo = it[0]
+			def combo = it[1]
+			def subset = it[2]
+			def trees = it[3].flatten()
 
-            [subset, combo, trees]
-    }
-	.set { phy_by_subset_combo_ch1 }
+			[subset, combo, trees]
+		}
+		.set { phy_by_subset_combo_ch1 }
+} else {
+	combo_window_phy_by_subset_ch2
+		.groupTuple(by: [2,1])
+		.map{ it ->
+
+			def chromo = it[0]
+			def combo = it[1]
+			def subset = it[2]
+			def trees = it[3].flatten()
+
+			[subset, combo, trees]
+    		}
+		.set { phy_by_subset_combo_ch1 }
+}
 
 /*
  * 		Summarise Gene Tree frequency distributions per combination using custom Python script
