@@ -7,6 +7,8 @@
 #SBATCH -p standard
 #SBATCH	-o test.r1.log
 
+export _JAVA_OPTIONS="-Xmx8G"
+
 nextflow \
 	run \
 	/path/to/main.nf \
