@@ -49,7 +49,7 @@ And if need be changed via:
     chmod 755 *
     ```
 
-* There is **sufficient storage capacity** on the location where you will execute the pipeline from (and where the nextflow work directory will be stored). On the MfN cluster, running on `/home/` will easily lead to problems and all pipelines will need to be executed from a `/datad/` project folder.
+* There is **sufficient storage capacity** on the location where you will execute the pipeline from (and where the nextflow work directory will be stored). On the MfN cluster, running on `/home/` will easily lead to problems and all pipelines will need to be executed from a project folder on main storage.
 
 
 ## Pipeline Summary
